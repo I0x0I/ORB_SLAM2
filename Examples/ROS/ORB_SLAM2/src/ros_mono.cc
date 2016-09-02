@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 
 
     // Save map
-    SLAM.SaveMap("Slam_latest_Map.bin");
+    SLAM.SaveMap("Slam_Map.bin");
     
 
     // Save camera trajectory
