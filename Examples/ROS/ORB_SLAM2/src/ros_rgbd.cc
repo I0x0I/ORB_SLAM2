@@ -110,7 +110,7 @@ int main(int argc, char **argv)
     bool bUseViewer = true;
     if (!strcmp(argv[3], "false"))
     {
-        bReuseMap = false;
+        bUseViewer = false;
     }
     bool bReuseMap = false;
     if (!strcmp(argv[4], "true"))
@@ -130,7 +130,7 @@ int main(int argc, char **argv)
     message_filters::Synchronizer<sync_pol> sync(sync_pol(10), rgb_sub,depth_sub);
     sync.registerCallback(boost::bind(&ImageGrabber::GrabRGBD,&igb,_1,_2));
 
-    ros::Publisher PosPub = nodeHandler.advertise<geometry_msgs::PoseStamped>("ORB_SLAM/pose", 5);
+    ros::Publisher PosPub = nh.advertise<geometry_msgs::PoseStamped>("ORB_SLAM/pose", 5);
     igb.pPosPub = &(PosPub);
 
     ros::spin();
