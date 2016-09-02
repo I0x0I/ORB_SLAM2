@@ -34,6 +34,10 @@
 
 #include"../../../include/System.h"
 
+#include "Converter.h"
+#include "geometry_msgs/PoseStamped.h"
+#include <tf/transform_broadcaster.h>
+
 using namespace std;
 
 class ImageGrabber
@@ -43,23 +47,78 @@ public:
 
     void GrabRGBD(const sensor_msgs::ImageConstPtr& msgRGB,const sensor_msgs::ImageConstPtr& msgD);
 
+    void PublishPose(cv::Mat Tcw);
+
     ORB_SLAM2::System* mpSLAM;
+    ros::Publisher* pPosPub;
 };
+
+//ros::Publisher pPosPub;
+
+void ImageGrabber::PublishPose(cv::Mat Tcw)
+{
+    geometry_msgs::PoseStamped poseMSG;
+    if(!Tcw.empty())
+    {
+
+        cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
+        cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
+
+        vector<float> q = ORB_SLAM2::Converter::toQuaternion(Rwc);
+
+
+        /*
+            cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
+            cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
+            tf::Matrix3x3 M(Rwc.at<float>(0,0),Rwc.at<float>(0,1),Rwc.at<float>(0,2),
+                            Rwc.at<float>(1,0),Rwc.at<float>(1,1),Rwc.at<float>(1,2),
+                            Rwc.at<float>(2,0),Rwc.at<float>(2,1),Rwc.at<float>(2,2));
+            tf::Vector3 V(twc.at<float>(0), twc.at<float>(1), twc.at<float>(2));
+
+            tf::Transform tfTcw(M,V);
+
+            //mTfBr.sendTransform(tf::StampedTransform(tfTcw,ros::Time::now(), "ORB_SLAM/World", "ORB_SLAM/Camera"));
+        */
+        poseMSG.pose.position.x = twc.at<float>(0);
+        poseMSG.pose.position.y = twc.at<float>(2);
+        poseMSG.pose.position.z = twc.at<float>(1);
+        poseMSG.pose.orientation.x = q[0];
+        poseMSG.pose.orientation.y = q[1];
+        poseMSG.pose.orientation.z = q[2];
+        poseMSG.pose.orientation.w = q[3];
+        poseMSG.header.frame_id = "VSLAM";
+        poseMSG.header.stamp = ros::Time::now();
+        //cout << "PublishPose position.x = " << poseMSG.pose.position.x << endl;
+
+        (pPosPub)->publish(poseMSG);
+
+        //mlbLost.push_back(mState==LOST);
+    }
+}
 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "RGBD");
     ros::start();
 
-    if(argc != 3)
+    if(argc != 5)
     {
-        cerr << endl << "Usage: rosrun ORB_SLAM2 RGBD path_to_vocabulary path_to_settings" << endl;        
+        cerr << endl << "Usage: rosrun ORB_SLAM2 RGBD path_to_vocabulary path_to_settings use_viewer reuse_map" << endl;        
         ros::shutdown();
         return 1;
-    }    
-
+    }
+    bool bUseViewer = true;
+    if (!strcmp(argv[3], "false"))
+    {
+        bReuseMap = false;
+    }
+    bool bReuseMap = false;
+    if (!strcmp(argv[4], "true"))
+    {
+        bReuseMap = true;
+    }
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::RGBD,true);
+    ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::RGBD,bUseViewer,bReuseMap);
 
     ImageGrabber igb(&SLAM);
 
@@ -71,10 +130,16 @@ int main(int argc, char **argv)
     message_filters::Synchronizer<sync_pol> sync(sync_pol(10), rgb_sub,depth_sub);
     sync.registerCallback(boost::bind(&ImageGrabber::GrabRGBD,&igb,_1,_2));
 
+    ros::Publisher PosPub = nodeHandler.advertise<geometry_msgs::PoseStamped>("ORB_SLAM/pose", 5);
+    igb.pPosPub = &(PosPub);
+
     ros::spin();
 
     // Stop all threads
     SLAM.Shutdown();
+
+    // Save map
+    SLAM.SaveMap("Slam_Map.bin");
 
     // Save camera trajectory
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
@@ -109,7 +174,6 @@ void ImageGrabber::GrabRGBD(const sensor_msgs::ImageConstPtr& msgRGB,const senso
         return;
     }
 
-    mpSLAM->TrackRGBD(cv_ptrRGB->image,cv_ptrD->image,cv_ptrRGB->header.stamp.toSec());
+    cv::Mat pose = mpSLAM->TrackRGBD(cv_ptrRGB->image,cv_ptrD->image,cv_ptrRGB->header.stamp.toSec());
+    PublishPose(pose);
 }
-
-

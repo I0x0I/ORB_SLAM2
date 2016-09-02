@@ -12,3 +12,5 @@ Thirdparty/g2o/config.h
 bin_vocabulary
 ORBvoc.txt
 ORBvoc.bin
+Slam_Map.bin
+rgbd.yaml
