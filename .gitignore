@@ -1,0 +1,14 @@
+build/
+lib/
+mono_kitti
+mono_tum
+rgbd_tum
+stereo_kitti
+Mono
+RGBD
+Stereo
+KeyFrameTrajectory.txt
+Thirdparty/g2o/config.h
+bin_vocabulary
+ORBvoc.txt
+ORBvoc.bin
