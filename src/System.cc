@@ -62,6 +62,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
        exit(-1);
     }
 
+    float resolution = fsSettings["PointCloudMapping.Resolution"];
 
     //Load ORB Vocabulary
     mpVocabulary = new ORBVocabulary();
@@ -131,10 +132,12 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mpFrameDrawer = new FrameDrawer(mpMap, bReuse);
     mpMapDrawer = new MapDrawer(mpMap, strSettingsFile);
 
+    mpPointCloudMapping = make_shared<PointCloudMapping>(resolution);
+
     //Initialize the Tracking thread
     //(it will live in the main thread of execution, the one that called this constructor)
     mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
-                             mpMap, mpKeyFrameDatabase, strSettingsFile, mSensor, bReuse);
+                             mpMap, mpPointCloudMapping, mpKeyFrameDatabase, strSettingsFile, mSensor, bReuse);
 
     //Initialize the Local Mapping thread and launch
     mpLocalMapper = new LocalMapping(mpMap, mSensor==MONOCULAR);
@@ -323,6 +326,7 @@ void System::Shutdown()
     mpLocalMapper->RequestFinish();
     mpLoopCloser->RequestFinish();
     mpViewer->RequestFinish();
+    mpPointCloudMapping->shutdown();
 
     // Wait until all thread have effectively stopped
     while(!mpLocalMapper->isFinished() || !mpLoopCloser->isFinished()  ||

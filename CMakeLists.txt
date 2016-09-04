@@ -31,6 +31,7 @@ LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 find_package(OpenCV 2.4.3 REQUIRED)
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
+find_package(PCL 1.7 REQUIRED)
 find_package(Boost  1.54.0  	     # Minimum or EXACT version e.g. 1.36.0
   REQUIRED             					# Fail with error if Boost is not found
   COMPONENTS serialization 				# Boost libraries by their canonical name
@@ -41,9 +42,13 @@ ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/include
 ${EIGEN3_INCLUDE_DIR}
 ${Pangolin_INCLUDE_DIRS}
+${PCL_INCLUDE_DIRS}
 )
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+
+add_definitions( ${PCL_DEFINITIONS} )
+link_directories( ${PCL_LIBRARY_DIRS} )
 
 add_library(${PROJECT_NAME} SHARED
 src/System.cc
@@ -65,6 +70,7 @@ src/KeyFrameDatabase.cc
 src/Sim3Solver.cc
 src/Initializer.cc
 src/Viewer.cc
+src/PointCloudMapping.cc
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -74,6 +80,7 @@ ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
 ${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
 ${Boost_LIBRARIES}
+${PCL_LIBRARIES}
 )
 
 # Build examples

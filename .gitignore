@@ -14,3 +14,4 @@ ORBvoc.txt
 ORBvoc.bin
 Slam_Map.bin
 rgbd.yaml
+pointcloud.pcd

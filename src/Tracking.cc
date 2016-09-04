@@ -43,9 +43,9 @@ using namespace std;
 namespace ORB_SLAM2
 {
 
-Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Map *pMap, KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, const bool bReuse):
+Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer, MapDrawer *pMapDrawer, Map *pMap, shared_ptr<PointCloudMapping> pPointCloud, KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, const bool bReuse):
     mState(NO_IMAGES_YET), mSensor(sensor), mbOnlyTracking(bReuse), mbVO(false), mpORBVocabulary(pVoc),
-    mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys),
+    mpPointCloudMapping(pPointCloud), mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys),
     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpMap(pMap), mnLastRelocFrameId(0)
 {
     // Load camera parameters from settings file
@@ -135,7 +135,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     cout << "- Scale Factor: " << fScaleFactor << endl;
     cout << "- Initial Fast Threshold: " << fIniThFAST << endl;
     cout << "- Minimum Fast Threshold: " << fMinThFAST << endl;
-    cout << "- Reuse Map ?: " << is_preloaded << endl;
+    cout << "- Reuse Map: " << is_preloaded << endl;
     if(sensor==System::STEREO || sensor==System::RGBD)
     {
         mThDepth = mbf*(float)fSettings["ThDepth"]/fx;
@@ -211,8 +211,9 @@ cv::Mat Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRe
 
 cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp)
 {
+    mImRGB = imRGB;
     mImGray = imRGB;
-    cv::Mat imDepth = imD;
+    mImDepth = imD;
 
     if(mImGray.channels()==3)
     {
@@ -229,10 +230,12 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const d
             cvtColor(mImGray,mImGray,CV_BGRA2GRAY);
     }
 
-    if(mDepthMapFactor!=1 || imDepth.type()!=CV_32F);
-    imDepth.convertTo(imDepth,CV_32F,mDepthMapFactor);
+    if(mDepthMapFactor!=1 || mImDepth.type()!=CV_32F)
+    {
+        mImDepth.convertTo(mImDepth,CV_32F,mDepthMapFactor);
+    }
 
-    mCurrentFrame = Frame(mImGray,imDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
+    mCurrentFrame = Frame(mImGray,mImDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
 
     Track();
 
@@ -1202,6 +1205,8 @@ void Tracking::CreateNewKeyFrame()
     mpLocalMapper->InsertKeyFrame(pKF);
 
     mpLocalMapper->SetNotStop(false);
+
+    mpPointCloudMapping->insertKeyFrame( pKF, this->mImRGB, this->mImDepth );
 
     mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame = pKF;

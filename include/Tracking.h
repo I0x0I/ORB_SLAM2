@@ -41,6 +41,9 @@
 
 #include <mutex>
 
+#include "PointCloudMapping.h"
+class PointCloudMapping;
+
 namespace ORB_SLAM2
 {
 
@@ -56,7 +59,7 @@ class Tracking
 
 public:
     Tracking(System* pSys, ORBVocabulary* pVoc, FrameDrawer* pFrameDrawer, MapDrawer* pMapDrawer, Map* pMap,
-             KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, const bool bReuse);
+             shared_ptr<PointCloudMapping> pPointCloud, KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, const bool bReuse);
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
     cv::Mat GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp);
@@ -95,7 +98,9 @@ public:
 
     // Current Frame
     Frame mCurrentFrame;
+    cv::Mat mImRGB;
     cv::Mat mImGray;
+    cv::Mat mImDepth;
 
     // Initialization Variables (Monocular)
     std::vector<int> mvIniLastMatches;
@@ -214,7 +219,8 @@ protected:
     //Color order (true RGB, false BGR, ignored if grayscale)
     bool mbRGB;
     list<MapPoint*> mlpTemporalPoints;
-	bool is_preloaded;
+    shared_ptr<PointCloudMapping>  mpPointCloudMapping;
+    bool is_preloaded;
 };
 
 } //namespace ORB_SLAM
