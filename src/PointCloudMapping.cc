@@ -33,18 +33,37 @@ PointCloudMapping::PointCloudMapping(double resolution_)
     this->sor.setStddevMulThresh(1.0);                    //设置判断是否为离群点的阈值
 
     globalMap = boost::make_shared< PointCloud >( );
-    
-    viewerThread = make_shared<thread>( bind(&PointCloudMapping::viewer, this ) );
+
 }
 
 void PointCloudMapping::shutdown()
 {
+    size_t N=0;
     {
-        unique_lock<mutex> lck(shutDownMutex);
-        shutDownFlag = true;
-        keyFrameUpdated.notify_one();
+      unique_lock<mutex> lck( keyframeMutex );
+      N = keyframes.size();
     }
-    viewerThread->join();
+
+    for ( size_t i=0; i<N ; i++ )
+    {
+        if(keyframes[i]->isBad())
+        {
+	    cout<<"skipping bad kf..."<<endl;
+	    continue;
+        }
+        PointCloud::Ptr p = generatePointCloud( keyframes[i], colorImgs[i], depthImgs[i] );
+        *globalMap += *p;
+    }
+    cout<<"show global map, size="<<globalMap->points.size()<<endl;
+    if(!globalMap->empty())                                           // save the pointcloud without optimization
+    {
+        PointCloud::Ptr tmp(new PointCloud());
+        sor.setInputCloud(globalMap);            // remove outlier points      
+        sor.filter( *tmp );
+        globalMap->swap( *tmp );                    
+        pcl::io::savePCDFileBinary( "pointcloud.pcd", *globalMap );
+        cout<<"Save point cloud file successfully!"<<endl;
+    }
 }
 
 void PointCloudMapping::insertKeyFrame(KeyFrame* kf, cv::Mat& color, cv::Mat& depth)
@@ -54,8 +73,6 @@ void PointCloudMapping::insertKeyFrame(KeyFrame* kf, cv::Mat& color, cv::Mat& de
     keyframes.push_back( kf );
     colorImgs.push_back( color.clone() );
     depthImgs.push_back( depth.clone() );
-    
-    keyFrameUpdated.notify_one();
 }
 
 pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePointCloud(KeyFrame* kf, cv::Mat& color, cv::Mat& depth)
@@ -67,16 +84,16 @@ pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePoi
         for ( int n=0; n<depth.cols; n+=3 )
         {
             float d = depth.ptr<float>(m)[n];
-            if (d < 0.01 || d>10)
+            if (d < 0.05 || d>3.5)
                 continue;
             PointT p;
             p.z = d;
             p.x = ( n - kf->cx) * p.z / kf->fx;
             p.y = ( m - kf->cy) * p.z / kf->fy;
             
-            p.b = color.ptr<uchar>(m)[n*3];
+            p.r = color.ptr<uchar>(m)[n*3];
             p.g = color.ptr<uchar>(m)[n*3+1];
-            p.r = color.ptr<uchar>(m)[n*3+2];
+            p.b = color.ptr<uchar>(m)[n*3+2];
                 
             tmp->points.push_back(p);
         }
@@ -90,71 +107,3 @@ pcl::PointCloud< PointCloudMapping::PointT >::Ptr PointCloudMapping::generatePoi
     cout<<"generate point cloud for kf "<<kf->mnId<<", size="<<cloud->points.size()<<endl;
     return cloud;
 }
-
-
-void PointCloudMapping::viewer()
-{
-    //pcl::visualization::CloudViewer viewer("viewer");
-    while(1)
-    {
-        {
-            unique_lock<mutex> lck_shutdown( shutDownMutex );
-            if (shutDownFlag)
-            {
-                break;
-            }
-        }
-        {
-            unique_lock<mutex> lck_keyframeUpdated( keyFrameUpdateMutex );
-            keyFrameUpdated.wait( lck_keyframeUpdated );
-        }
-        
-        // keyframe is updated 
-        size_t N=0;
-        {
-            unique_lock<mutex> lck( keyframeMutex );
-            N = keyframes.size();
-        }
-        
-        for ( size_t i=lastKeyframeSize; i<N ; i++ )
-        {
-            PointCloud::Ptr p = generatePointCloud( keyframes[i], colorImgs[i], depthImgs[i] );
-            *globalMap += *p;
-        }
-        //PointCloud::Ptr tmp(new PointCloud());
-        //voxel.setInputCloud( globalMap );
-        //voxel.filter( *tmp );
-        //globalMap->swap( *tmp );
-        //viewer.showCloud( globalMap );                                        // show the pointcloud without optimization
-        cout<<"show global map, size="<<globalMap->points.size()<<endl;
-        lastKeyframeSize = N;
-    }
-    if(!globalMap->empty())                                           // save the pointcloud without optimization
-    {
-        PointCloud::Ptr tmp(new PointCloud());
-	sor.setInputCloud(globalMap);            // remove outlier points      
-	sor.filter( *tmp );
-        globalMap->swap( *tmp );                    
-        pcl::io::savePCDFileBinary( "pointcloud.pcd", *globalMap );
-        cout<<"Save point cloud file successfully!"<<endl;
-    }
-    /*cout << endl <<"Start to show optimized map!"<<endl;
-    globalMap->clear();
-    for(size_t i=0;i<keyframes.size();i++)                               // save the optimized pointcloud
-    {
-        cout<<"keyframe "<<i<<" ..."<<endl;
-        PointCloud::Ptr tp = generatePointCloud( keyframes[i], colorImgs[i], depthImgs[i] );
-        PointCloud::Ptr tmp(new PointCloud());
-        voxel.setInputCloud( tp );
-        voxel.filter( *tmp );
-        *globalMap += *tmp;
-        viewer.showCloud( globalMap );
-    }
-    PointCloud::Ptr tmp(new PointCloud());
-    sor.setInputCloud(globalMap);
-    sor.filter(*tmp);
-    globalMap->swap( *tmp );         
-    pcl::io::savePCDFileBinary ( "optimized_pointcloud.pcd", *globalMap );
-    cout<<"Save point cloud file successfully!"<<endl;*/
-}
-
