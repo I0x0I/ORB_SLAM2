@@ -35,7 +35,7 @@
 #include"../../../include/System.h"
 
 #include "Converter.h"
-#include "geometry_msgs/PoseStamped.h"
+#include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include <tf/transform_broadcaster.h>
 
 using namespace std;
@@ -58,16 +58,31 @@ public:
 void ImageGrabber::PublishPose(cv::Mat Tcw)
 {
     static tf::TransformBroadcaster mTfBr;
+    geometry_msgs::PoseWithCovarianceStamped poseMSG;
+
     if(!Tcw.empty())
     {
         cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
         cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
         vector<float> q = ORB_SLAM2::Converter::toQuaternion(Rwc);
+
         tf::Quaternion tfQuat;
         tfQuat.setRPY(q[0], q[2], -q[1]);
         tf::Vector3 V( twc.at<float>(0), twc.at<float>(1), twc.at<float>(2));
         tf::Transform tfTcw(tfQuat, V);
         mTfBr.sendTransform(tf::StampedTransform(tfTcw,ros::Time::now(), "map", "base_link"));
+
+        poseMSG.pose.pose.position.x = twc.at<float>(0);
+        poseMSG.pose.pose.position.y = twc.at<float>(2);
+        poseMSG.pose.pose.position.z = twc.at<float>(1);
+        poseMSG.pose.pose.orientation.x = q[0];
+        poseMSG.pose.pose.orientation.y = q[2];
+        poseMSG.pose.pose.orientation.z = -q[1];
+        poseMSG.pose.pose.orientation.w = q[3];
+        poseMSG.header.frame_id = "projected_map";
+        poseMSG.header.stamp = ros::Time::now();
+        (pPosPub)->publish(poseMSG);
+
     }
 }
 int main(int argc, char **argv)
@@ -104,7 +119,7 @@ int main(int argc, char **argv)
     message_filters::Synchronizer<sync_pol> sync(sync_pol(10), rgb_sub,depth_sub);
     sync.registerCallback(boost::bind(&ImageGrabber::GrabRGBD,&igb,_1,_2));
 
-    ros::Publisher PosPub = nh.advertise<geometry_msgs::PoseStamped>("ORB_SLAM/pose", 5);
+    ros::Publisher PosPub = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("initialpose", 5);
     igb.pPosPub = &(PosPub);
 
     ros::spin();
