@@ -62,23 +62,27 @@ void ImageGrabber::PublishPose(cv::Mat Tcw)
 
     if(!Tcw.empty())
     {
+        double angles[3];
         cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
         cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
-        vector<float> q = ORB_SLAM2::Converter::toQuaternion(Rwc);
 
-        tf::Quaternion tfQuat;
-        tfQuat.setRPY(q[0], q[2], -q[1]);
-        tf::Vector3 V( twc.at<float>(0), twc.at<float>(1), twc.at<float>(2));
-        tf::Transform tfTcw(tfQuat, V);
+        tf::Matrix3x3 tfRwc(Rwc.at<float>(0),Rwc.at<float>(1),Rwc.at<float>(2),Rwc.at<float>(3),Rwc.at<float>(4),Rwc.at<float>(5),Rwc.at<float>(6),Rwc.at<float>(7),Rwc.at<float>(8));
+        tfRwc.getRPY(angles[0],angles[1],angles[2]);
+
+        tf::Quaternion Q;
+        Q.setRPY(angles[2],-angles[0],-angles[1]);
+        tf::Vector3 V(twc.at<float>(2), -twc.at<float>(0), -twc.at<float>(1));
+
+        tf::Transform tfTcw(Q, V);
         mTfBr.sendTransform(tf::StampedTransform(tfTcw,ros::Time::now(), "map", "base_link"));
 
-        poseMSG.pose.pose.position.x = twc.at<float>(0);
-        poseMSG.pose.pose.position.y = twc.at<float>(2);
-        poseMSG.pose.pose.position.z = twc.at<float>(1);
-        poseMSG.pose.pose.orientation.x = q[0];
-        poseMSG.pose.pose.orientation.y = q[2];
-        poseMSG.pose.pose.orientation.z = -q[1];
-        poseMSG.pose.pose.orientation.w = q[3];
+        poseMSG.pose.pose.position.x = V.x();
+        poseMSG.pose.pose.position.y = V.y();
+        poseMSG.pose.pose.position.z = V.z();
+        poseMSG.pose.pose.orientation.x = Q.x();
+        poseMSG.pose.pose.orientation.y = Q.y();
+        poseMSG.pose.pose.orientation.z = Q.z();
+        poseMSG.pose.pose.orientation.w = Q.w();
         poseMSG.header.frame_id = "projected_map";
         poseMSG.header.stamp = ros::Time::now();
         (pPosPub)->publish(poseMSG);
